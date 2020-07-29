@@ -55,5 +55,5 @@ HAPROXY_TIMEOUT_CHECK=100ms  # haproxy's 'timeout check' option
 
 DISCOVERY_METHOD=dns  # currently required, but this is the only option. This is to future proof.
 DISCOVERY_DNS_REFRESH=5s  # how often to query DNS record
-DISCOVERY_DNS_NAME=  # The SRV DNS record to use for peers. This must be the form of `_[service]._[proto]._[domain].`
+DISCOVERY_DNS_NAME=  # The SRV DNS record to use for peers. This must be the form of `_[service]._[proto].[name].`
 ```
