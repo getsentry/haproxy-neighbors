@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/haproxytech/client-native/v2/runtime"
 )
 
@@ -33,6 +34,14 @@ func init() {
 }
 
 func main() {
+	if err := sentry.Init(sentry.ClientOptions{
+		Debug: true,
+	}); err != nil {
+		log.Fatal(err)
+	}
+	defer sentry.Flush(5 * time.Second)
+	defer sentryRecoverRepanic()
+
 	config, err := getConfig()
 	maybePanic(err)
 
@@ -44,6 +53,7 @@ func main() {
 	signalHandler := make(chan os.Signal)
 	signal.Notify(signalHandler, os.Interrupt, syscall.SIGTERM)
 	go func() {
+		defer sentryRecoverRepanic()
 		<-signalHandler
 		exit <- struct{}{}
 	}()
@@ -64,6 +74,7 @@ func main() {
 			maybePanic(haproxy.Start())
 
 			go func() {
+				defer sentryRecoverRepanic()
 				haproxy.Wait()
 				exit <- struct{}{}
 			}()
@@ -104,4 +115,13 @@ func main() {
 	// attempt to clean up our files we wrote to disk to be nice
 	os.Remove(config.HaproxyAdminSocket)
 	os.Remove(config.HaproxyConfPath)
+}
+
+// sentryRecoverRepanic recovers from a runtime panic, reports it to Sentry and
+// starts panicking again.
+func sentryRecoverRepanic() {
+	if err := recover(); err != nil {
+		sentry.CurrentHub().Recover(err)
+		panic(err)
+	}
 }

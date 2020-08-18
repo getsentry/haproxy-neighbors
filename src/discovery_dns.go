@@ -129,6 +129,8 @@ func (d *dnsDiscovery) lookup() (hosts []Host) {
 
 func (d *dnsDiscovery) Loop(fn loopFn) {
 	go func() {
+		defer sentryRecoverRepanic()
+
 		hosts := d.lookup()
 		fn(hosts)
 

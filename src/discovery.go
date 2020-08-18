@@ -41,7 +41,13 @@ type Discovery interface {
 type noopDiscovery struct{}
 
 func (d *noopDiscovery) Init(c *Config) {}
-func (d *noopDiscovery) Loop(fn loopFn) { go func() { fn([]Host{}); select {} }() }
+func (d *noopDiscovery) Loop(fn loopFn) {
+	go func() {
+		defer sentryRecoverRepanic()
+		fn([]Host{})
+		select {}
+	}()
+}
 
 func NewDiscovery(c *Config) Discovery {
 	var d Discovery
