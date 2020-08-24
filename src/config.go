@@ -38,9 +38,12 @@ type Config struct {
 	HaproxyTimeoutServer  time.Duration `default:"5s" split_words:"true"`
 	HaproxyTimeoutCheck   time.Duration `default:"100ms" split_words:"true"`
 
-	DiscoveryMethod     DiscoveryMethod `required:"true" split_words:"true"`
-	DiscoveryDNSRefresh time.Duration   `default:"5s" split_words:"true"`
-	DiscoveryDNSName    string          `default:"" split_words:"true"`
+	DiscoveryMethod        DiscoveryMethod `required:"true" split_words:"true"`
+	DiscoveryDNSRefresh    time.Duration   `default:"5s" split_words:"true"`
+	DiscoveryDNSName       string          `default:"" split_words:"true"`
+	DiscoveryDNSResolvConf string          `default:"/etc/resolv.conf" split_words:"true"`
+	DiscoveryDNSUseTCP     bool            `default:"true" split_words:"true"`
+	DiscoveryDNSPort       int             `default:"53" split_words:"true"`
 }
 
 func getConfig() (*Config, error) {

@@ -15,6 +15,7 @@ type dnsDiscovery struct {
 	dnsConfig *dns.ClientConfig
 	nameList  []string
 	hostname  string
+	net       string
 }
 
 // We assume the hostname portion is the first part before the .
@@ -34,9 +35,15 @@ func idFromHostname(h string) int {
 
 func (d *dnsDiscovery) Init(c *Config) {
 	d.c = c
-	d.dnsConfig, _ = dns.ClientConfigFromFile("/etc/resolv.conf")
+	d.dnsConfig, _ = dns.ClientConfigFromFile(c.DiscoveryDNSResolvConf)
+	d.dnsConfig.Port = strconv.Itoa(c.DiscoveryDNSPort)
 	d.nameList = d.dnsConfig.NameList(d.c.DiscoveryDNSName)
 	d.hostname, _ = os.Hostname()
+	if c.DiscoveryDNSUseTCP {
+		d.net = "tcp"
+	} else {
+		d.net = "udp"
+	}
 }
 
 func (d *dnsDiscovery) lookup() (hosts []Host) {
@@ -58,14 +65,21 @@ func (d *dnsDiscovery) lookup() (hosts []Host) {
 	hosts = make([]Host, d.c.HaproxySlots)
 	for _, server := range d.dnsConfig.Servers {
 		for _, name := range d.nameList {
-			c := new(dns.Client)
+			c := &dns.Client{
+				Net: d.net,
+			}
 			m := new(dns.Msg)
 			m.SetQuestion(name, dns.TypeSRV)
 			m.RecursionDesired = true
-			r, _, err := c.Exchange(m, server+":"+d.dnsConfig.Port)
+			dnsHost := server + ":" + d.dnsConfig.Port
+			r, _, err := c.Exchange(m, dnsHost)
 			if err != nil {
 				log.Println(err)
 				continue
+			}
+
+			if r.MsgHdr.Truncated {
+				log.Println("! DNS Query was truncated")
 			}
 
 			// On failure, we just move onto the next name
