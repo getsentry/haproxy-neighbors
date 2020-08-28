@@ -97,18 +97,26 @@ func (d *dnsDiscovery) lookup() (hosts []Host) {
 			if len(d.nameList) > 1 {
 				d.nameList = []string{name}
 			}
+
+			// Map all of extra A records so we can grab them from SRV
+			extraAs := make(map[string]*dns.A)
+			for _, answer := range r.Extra {
+				if a, ok := answer.(*dns.A); ok {
+					extraAs[a.Header().Name] = a
+				}
+			}
+
 			// We have Extra data that matches the Answer.
 			// This means the Extra data contains an A record for
 			// each corresponding SRV record, so we have everything
 			// we need in one query.
-			if len(r.Extra) == len(r.Answer) {
+			if len(extraAs) == len(r.Answer) {
 				for i := 0; i < len(r.Answer); i++ {
 					answer := r.Answer[i]
-					extra := r.Extra[i]
 					srv, _ := answer.(*dns.SRV)
-					a, _ := extra.(*dns.A)
+					a := extraAs[srv.Target]
 
-					hostname := getHostname(a.Hdr.Name)
+					hostname := getHostname(a.Header().Name)
 					id := idFromHostname(hostname)
 					ip := a.A.String()
 
@@ -121,7 +129,7 @@ func (d *dnsDiscovery) lookup() (hosts []Host) {
 					if id < d.c.HaproxySlots {
 						hosts[id] = Host{
 							Name: hostname,
-							FQDN: a.Hdr.Name,
+							FQDN: a.Header().Name,
 							IP:   ip,
 							Port: int(srv.Port),
 						}
@@ -133,6 +141,9 @@ func (d *dnsDiscovery) lookup() (hosts []Host) {
 				// the A records for each host here to build up the full
 				// mapping. But until then, I think our DNS servers always attach
 				// what we need.
+				log.Println(r.Answer)
+				log.Println(extraAs)
+				log.Println(r.Extra)
 				panic("not implemented")
 			}
 			return
