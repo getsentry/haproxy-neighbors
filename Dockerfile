@@ -1,4 +1,4 @@
-FROM golang:1.15-rc-alpine AS builder
+FROM golang:1.15-alpine AS builder
 
 RUN apk add --no-cache make
 
@@ -11,7 +11,7 @@ RUN go mod download
 COPY . ./
 RUN make
 
-FROM haproxy:2.2.0-alpine
+FROM haproxy:2.2.5-alpine
 COPY --from=builder /usr/src/haproxy-neighbors /usr/local/bin/
 
 CMD ["/usr/local/bin/haproxy-neighbors"]
