@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"fmt"
 
 	"github.com/miekg/dns"
 )
@@ -46,7 +47,7 @@ func (d *dnsDiscovery) Init(c *Config) {
 	}
 }
 
-func (d *dnsDiscovery) lookup() (hosts []Host) {
+func (d *dnsDiscovery) lookup() (hosts []Host, reterr error) {
 	// Welcome to the meat.
 	// We rely on querying an SRV record to build up
 	// a list of hosts to be sent along to haproxy.
@@ -63,6 +64,8 @@ func (d *dnsDiscovery) lookup() (hosts []Host) {
 	// query for each possible name in the nameList. This includes each
 	// permutation of the search domain and ndots if applicable.
 	hosts = make([]Host, d.c.HaproxySlots)
+	reterr = nil
+
 	for _, server := range d.dnsConfig.Servers {
 		for _, name := range d.nameList {
 			c := &dns.Client{
@@ -75,6 +78,7 @@ func (d *dnsDiscovery) lookup() (hosts []Host) {
 			r, _, err := c.Exchange(m, dnsHost)
 			if err != nil {
 				log.Println(err)
+				reterr = err
 				continue
 			}
 
@@ -86,8 +90,10 @@ func (d *dnsDiscovery) lookup() (hosts []Host) {
 			if r.Rcode != dns.RcodeSuccess {
 				if r.Rcode == dns.RcodeNameError {
 					log.Printf("NXDOMAIN %s@%s:%s\n", name, server, d.dnsConfig.Port)
+					reterr = fmt.Errorf("NXDOMAIN %s@%s:%s", name, server, d.dnsConfig.Port)
 				} else {
 					log.Println("Unknown DNS failure", r.Rcode)
+					reterr = fmt.Errorf("Unknown DNS failure. Code: %d", r.Rcode)
 				}
 				continue
 			}
@@ -146,6 +152,9 @@ func (d *dnsDiscovery) lookup() (hosts []Host) {
 				log.Println(r.Extra)
 				panic("not implemented")
 			}
+			// We end up here only after successful resolution
+			// therefore nullify previous errors
+			reterr = nil
 			return
 		}
 	}
@@ -154,7 +163,14 @@ func (d *dnsDiscovery) lookup() (hosts []Host) {
 
 func (d *dnsDiscovery) Loop(fn loopFn) {
 	go func() {
-		hosts := d.lookup()
+		hosts, err := d.lookup()
+		if err != nil {
+			// This is the first time we attempt DNS lookup so it
+			// is ok to ignore error and jump into the loop with
+			// empty hosts as they will eventually fill with next
+			// lookup
+			log.Println("error occured doing the first lookup, ignoring")
+		}
 		fn(hosts)
 
 		ticker := time.NewTicker(d.c.DiscoveryDNSRefresh)
@@ -162,7 +178,10 @@ func (d *dnsDiscovery) Loop(fn loopFn) {
 			select {
 			case <-ticker.C:
 				before := hosts
-				hosts = d.lookup()
+				hosts, err = d.lookup()
+				if err != nil {
+					continue
+				}
 				// Only want to notify if there's a change
 				// between lookups
 				if !hostsEqual(before, hosts) {
